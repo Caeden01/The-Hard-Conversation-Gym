@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   Mic,
   Volume2,
+  Eye,
+  User,
 } from "lucide-react";
 
 function getScoreColor(score) {
@@ -31,6 +33,7 @@ export default function VoiceScorePanel({
   emotionalState,
   isListening,
   isSpeaking,
+  visionData,
 }) {
   const emoConfig = EMOTIONAL_CONFIG[emotionalState] || EMOTIONAL_CONFIG.calm;
 
@@ -211,6 +214,59 @@ export default function VoiceScorePanel({
           </div>
         )}
       </div>
+
+      {/* Vision data card */}
+      {visionData && (
+        <div className="sidebar-card">
+          <div className="sidebar-card-label">
+            <Eye size={13} />
+            Your Body Language
+          </div>
+          {visionData.faceDetected ? (
+            <div className="vision-detail-list">
+              {/* Top 3 emotions as mini bars */}
+              {visionData.top3 && visionData.top3.length > 0 && (
+                <div className="emotion-bars">
+                  {visionData.top3.map((e, i) => (
+                    <div key={i} className="emo-bar-row">
+                      <span className={`emo-bar-label ${i === 0 ? "emotion-text-" + e.emotion : ""}`}>
+                        {e.emotion}
+                      </span>
+                      <div className="emo-bar-track">
+                        <div
+                          className={`emo-bar-fill ${i === 0 ? "primary" : ""}`}
+                          style={{ width: `${e.score}%` }}
+                        />
+                      </div>
+                      <span className="emo-bar-pct">{e.score}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {visionData.bodyDetected && (
+                <div className="vision-detail-row" style={{ marginTop: 8 }}>
+                  <span className="vd-label">Posture</span>
+                  <span className={`vd-value posture-text-${visionData.posture}`}>
+                    {visionData.posture}
+                  </span>
+                </div>
+              )}
+              {visionData.postureSignals.length > 0 && (
+                <div className="vision-signals">
+                  {visionData.postureSignals.map((s, i) => (
+                    <span key={i} className="vision-signal-tag">
+                      {s.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="sidebar-empty">No face detected</p>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

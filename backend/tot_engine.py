@@ -53,8 +53,13 @@ class TreeOfThoughts:
             "backstory": p.backstory,
         }
 
-    async def process_turn(self, clinician_utterance: str) -> dict:
+    async def process_turn(self, clinician_utterance: str, visual_context: str = "") -> dict:
         """Process a clinician utterance: score it, generate branches, select best path.
+
+        Args:
+            clinician_utterance: What the clinician said.
+            visual_context: Optional description of clinician's facial expression and posture
+                from webcam analysis (e.g. "The clinician appears nervous. Arms crossed.").
 
         Returns the selected patient response and live scoring data.
         """
@@ -65,15 +70,17 @@ class TreeOfThoughts:
             clinician_utterance,
             self.scenario.clinical_context,
             self.scenario.spikes_notes,
+            visual_context=visual_context,
         )
 
-        # 2. Generate 3 branching patient responses
+        # 2. Generate 3 branching patient responses (with visual context)
         branches = await generate_branch_responses(
             self.client,
             self.conversation_history,
             clinician_utterance,
             self._get_patient_profile(),
             self.scenario.clinical_context,
+            visual_context=visual_context,
         )
 
         # 3. Select the most realistic branch for the live conversation

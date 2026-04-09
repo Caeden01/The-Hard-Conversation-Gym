@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import VoiceScorePanel from "./VoiceScorePanel";
+import useVisionAnalysis from "../hooks/useVisionAnalysis";
 import {
   Square,
   UserRound,
@@ -7,6 +8,9 @@ import {
   Volume2,
   VolumeX,
   Radio,
+  Camera,
+  CameraOff,
+  Eye,
 } from "lucide-react";
 
 /* ─── helpers ─── */
@@ -49,6 +53,10 @@ export default function VoiceConversation({ session, onEndSession }) {
   const [emotionalState, setEmotionalState] = useState("calm");
   const [connected, setConnected] = useState(false);
   const [micActive, setMicActive] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+
+  // Vision analysis — webcam emotion + posture detection
+  const { videoRef, canvasRef, ready: visionReady, error: visionError, visionData, getSnapshot } = useVisionAnalysis(cameraEnabled);
 
   const wsRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -60,6 +68,8 @@ export default function VoiceConversation({ session, onEndSession }) {
   const ttsEnabledRef = useRef(true);
   const emotionalStateRef = useRef("calm");
   const isEndingRef = useRef(false);
+  const getSnapshotRef = useRef(getSnapshot);
+  useEffect(() => { getSnapshotRef.current = getSnapshot; }, [getSnapshot]);
 
   // Keep refs in sync for use inside callbacks that capture stale closures
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
@@ -181,14 +191,16 @@ export default function VoiceConversation({ session, onEndSession }) {
 
         setMessages((prev) => [...prev, { role: "clinician", content: finalText }]);
 
-        // Send to backend
+        // Send to backend with vision snapshot
         if (wsRef.current?.readyState === WebSocket.OPEN) {
+          const vision = getSnapshotRef.current();
           wsRef.current.send(JSON.stringify({
             type: "utterance",
             text: finalText,
             speech_duration_ms: Math.max(duration, 500),
             pause_before_ms: Math.max(0, pauseBefore),
             was_interrupted: isSpeakingRef.current,
+            vision: vision,
           }));
         }
 
@@ -302,13 +314,21 @@ export default function VoiceConversation({ session, onEndSession }) {
             <div className={`connection-dot ${connected ? "connected" : ""}`} />
             <button
               className="btn-tts-toggle"
+              onClick={() => setCameraEnabled(!cameraEnabled)}
+              aria-label={cameraEnabled ? "Disable camera" : "Enable camera"}
+              title={cameraEnabled ? "Camera on" : "Camera off"}
+            >
+              {cameraEnabled ? <Camera size={15} /> : <CameraOff size={15} />}
+            </button>
+            <button
+              className="btn-tts-toggle"
               onClick={() => {
                 setTtsEnabled(!ttsEnabled);
                 if (ttsEnabled) window.speechSynthesis.cancel();
               }}
               aria-label={ttsEnabled ? "Mute patient voice" : "Unmute patient voice"}
             >
-              {ttsEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {ttsEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
             </button>
             <button
               className="btn btn-end"
@@ -405,13 +425,54 @@ export default function VoiceConversation({ session, onEndSession }) {
         </div>
       </div>
 
-      <VoiceScorePanel
-        scores={scores}
-        voiceAnalyses={voiceAnalyses}
-        emotionalState={emotionalState}
-        isListening={micActive}
-        isSpeaking={isSpeaking}
-      />
+      <div className="voice-right-col">
+        {/* Webcam preview */}
+        {cameraEnabled && (
+          <div className="webcam-card">
+            <div className="webcam-container">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="webcam-video"
+              />
+              <canvas ref={canvasRef} className="webcam-overlay" />
+
+              {/* Live emotion + posture badges */}
+              {visionReady && visionData.faceDetected && (
+                <div className="vision-badges">
+                  <span className={`vision-badge emotion-${visionData.emotion}`}>
+                    <Eye size={10} />
+                    {visionData.emotion}
+                  </span>
+                  {visionData.bodyDetected && visionData.posture !== "unknown" && (
+                    <span className={`vision-badge posture-${visionData.posture}`}>
+                      {visionData.posture}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {!visionReady && !visionError && (
+                <div className="webcam-loading">
+                  <div className="spinner" style={{ width: 16, height: 16, borderWidth: 1.5 }} />
+                  <span>Loading vision...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <VoiceScorePanel
+          scores={scores}
+          voiceAnalyses={voiceAnalyses}
+          emotionalState={emotionalState}
+          isListening={micActive}
+          isSpeaking={isSpeaking}
+          visionData={cameraEnabled ? visionData : null}
+        />
+      </div>
     </div>
   );
 }

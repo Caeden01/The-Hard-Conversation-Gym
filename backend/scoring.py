@@ -26,6 +26,7 @@ async def score_utterance(
     clinician_utterance: str,
     scenario_context: str,
     spikes_notes: dict[str, str],
+    visual_context: str = "",
 ) -> dict:
     """Score a single clinician utterance against SPIKES + empathy."""
 
@@ -33,6 +34,14 @@ async def score_utterance(
         f"{'Clinician' if m['role'] == 'clinician' else 'Patient'}: {m['content']}"
         for m in conversation_history
     )
+
+    visual_block = ""
+    if visual_context:
+        visual_block = f"""
+## Clinician's Visual Cues (from webcam)
+{visual_context}
+Note: Use this body language data to assess whether the clinician's non-verbal communication matches their words. A clinician who says empathetic words but appears nervous, avoids eye contact, or has crossed arms may score lower on empathy delivery. Conversely, warm facial expressions and open posture can enhance an otherwise adequate verbal response.
+"""
 
     prompt = f"""You are an expert clinical communication evaluator. Score the clinician's most recent utterance in a difficult conversation.
 
@@ -47,7 +56,7 @@ async def score_utterance(
 
 ## Clinician's Latest Utterance
 "{clinician_utterance}"
-
+{visual_block}
 ## Clinical Context
 {scenario_context}
 
@@ -100,6 +109,7 @@ async def generate_branch_responses(
     clinician_utterance: str,
     patient_profile: dict,
     scenario_context: str,
+    visual_context: str = "",
 ) -> list[dict]:
     """Generate 3 branching patient responses for ToT evaluation."""
 
@@ -107,6 +117,14 @@ async def generate_branch_responses(
         f"{'Clinician' if m['role'] == 'clinician' else 'Patient'}: {m['content']}"
         for m in conversation_history
     )
+
+    visual_block = ""
+    if visual_context:
+        visual_block = f"""
+## Clinician's Body Language (observed by patient)
+{visual_context}
+The patient can see the clinician's facial expression and body language. A patient picks up on non-verbal cues — if the doctor looks uncomfortable, avoids eye contact, has crossed arms, or appears rushed, the patient notices and reacts accordingly. If the doctor appears warm, maintains eye contact, and has open posture, the patient feels safer.
+"""
 
     prompt = f"""You are simulating realistic patient responses for a medical communication training system.
 
@@ -125,7 +143,7 @@ Backstory: {patient_profile['backstory']}
 
 ## Clinician's Latest Utterance
 "{clinician_utterance}"
-
+{visual_block}
 Generate exactly 3 different realistic patient responses, each representing a different emotional branch:
 
 1. DEFENSIVE: The patient reacts with defensiveness, denial, anger, or resistance

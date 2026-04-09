@@ -323,18 +323,41 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                 pause_before = data.get("pause_before_ms", 0)
                 was_interrupted = data.get("was_interrupted", False)
 
+                # Vision data from webcam (face emotion + posture)
+                vision = data.get("vision", {})
+
                 # Analyze voice delivery
                 voice_data = analyze_speech_metadata(
                     text, speech_duration, pause_before, was_interrupted
                 )
                 session.voice_analyses.append(voice_data)
 
-                # Send "processing" signal so frontend shows thinking state
+                # Build visual context string for the AI
+                visual_context = ""
+                if vision:
+                    face_emo = vision.get("emotion", "")
+                    face_conf = vision.get("emotionConfidence", 0)
+                    posture = vision.get("posture", "")
+                    signals = vision.get("postureSignals", [])
+                    if face_emo and face_conf > 0.3:
+                        visual_context += f"The clinician's facial expression appears {face_emo} (confidence: {face_conf:.0%}). "
+                    if posture and posture != "unknown":
+                        visual_context += f"Their body posture is {posture}. "
+                    if signals:
+                        visual_context += f"Body language signals: {', '.join(signals)}. "
+
+                # Store vision data on the session for debrief
+                if not hasattr(session, "vision_history"):
+                    session.vision_history = []
+                session.vision_history.append(vision)
+
                 await websocket.send_json({"type": "processing"})
 
                 try:
-                    # Run through ToT engine
-                    result = await session.tot.process_turn(text)
+                    # Pass visual context into the ToT engine
+                    result = await session.tot.process_turn(
+                        text, visual_context=visual_context
+                    )
 
                     await websocket.send_json({
                         "type": "response",
@@ -347,6 +370,7 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                             "tone": result.get("tone", "neutral"),
                         },
                         "voice_analysis": voice_data,
+                        "vision": vision,
                         "turn_number": result.get("turn_number", 0),
                     })
                 except Exception as e:
@@ -357,6 +381,7 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
                         "emotional_state": "withdrawn",
                         "scores": {"empathy_score": 0.5, "spikes_score": 0.5},
                         "voice_analysis": voice_data,
+                        "vision": vision,
                         "turn_number": 0,
                     })
 
